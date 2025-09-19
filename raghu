@@ -1,0 +1,165 @@
+#include <SDL2/SDL.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <time.h>
+
+// Define constants
+#define SCREEN_WIDTH  400
+#define SCREEN_HEIGHT 600
+#define GRAVITY 0.5
+#define JUMP_STRENGTH -10
+#define PIPE_WIDTH 60
+#define PIPE_GAP 150
+#define PIPE_VELOCITY 2
+
+// Structure for the bird
+typedef struct {
+    int x, y, velocity;
+} Bird;
+
+// Structure for pipes
+typedef struct {
+    int x, y, height;
+} Pipe;
+
+// Function to initialize SDL
+bool init(SDL_Window **window, SDL_Renderer **renderer) {
+    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+        printf("SDL could not initialize! SDL_Error: %s\n", SDL_GetError());
+        return false;
+    }
+    
+    *window = SDL_CreateWindow("Flappy Bird", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
+    if (*window == NULL) {
+        printf("Window could not be created! SDL_Error: %s\n", SDL_GetError());
+        return false;
+    }
+
+    *renderer = SDL_CreateRenderer(*window, -1, SDL_RENDERER_ACCELERATED);
+    if (*renderer == NULL) {
+        printf("Renderer could not be created! SDL_Error: %s\n", SDL_GetError());
+        return false;
+    }
+    
+    return true;
+}
+
+// Function to handle the bird's movement
+void moveBird(Bird *bird) {
+    bird->velocity += GRAVITY;
+    bird->y += bird->velocity;
+    if (bird->y < 0) bird->y = 0;  // Prevent bird from going above the screen
+    if (bird->y > SCREEN_HEIGHT) bird->y = SCREEN_HEIGHT;  // Prevent bird from going below the screen
+}
+
+// Function to handle jumping
+void jump(Bird *bird) {
+    bird->velocity = JUMP_STRENGTH;
+}
+
+// Function to handle pipe movement
+void movePipes(Pipe pipes[], int *score) {
+    for (int i = 0; i < 2; i++) {
+        pipes[i].x -= PIPE_VELOCITY;
+        if (pipes[i].x + PIPE_WIDTH < 0) {
+            pipes[i].x = SCREEN_WIDTH;
+            pipes[i].height = rand() % (SCREEN_HEIGHT - PIPE_GAP);
+            if (pipes[i].height > SCREEN_HEIGHT - PIPE_GAP) pipes[i].height = SCREEN_HEIGHT - PIPE_GAP;
+            (*score)++;
+        }
+    }
+}
+
+// Function to check if the bird collides with pipes
+bool checkCollision(Bird *bird, Pipe pipes[]) {
+    for (int i = 0; i < 2; i++) {
+        if (bird->x + 20 > pipes[i].x && bird->x < pipes[i].x + PIPE_WIDTH) {
+            if (bird->y < pipes[i].height || bird->y + 20 > pipes[i].height + PIPE_GAP) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Main game loop
+int main() {
+    SDL_Window *window = NULL;
+    SDL_Renderer *renderer = NULL;
+    if (!init(&window, &renderer)) {
+        return -1;
+    }
+
+    srand(time(NULL));
+
+    // Initialize bird and pipes
+    Bird bird = {50, SCREEN_HEIGHT / 2, 0};
+    Pipe pipes[2] = {
+        {SCREEN_WIDTH, rand() % (SCREEN_HEIGHT - PIPE_GAP), rand() % (SCREEN_HEIGHT - PIPE_GAP)},
+        {SCREEN_WIDTH + SCREEN_WIDTH / 2, rand() % (SCREEN_HEIGHT - PIPE_GAP), rand() % (SCREEN_HEIGHT - PIPE_GAP)}
+    };
+    
+    int score = 0;
+    bool quit = false;
+    SDL_Event e;
+
+    // Game loop
+    while (!quit) {
+        // Handle events
+        while (SDL_PollEvent(&e) != 0) {
+            if (e.type == SDL_QUIT) {
+                quit = true;
+            }
+            if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_SPACE) {
+                jump(&bird);
+            }
+        }
+
+        // Move the bird and pipes
+        moveBird(&bird);
+        movePipes(pipes, &score);
+
+        // Check collision
+        if (checkCollision(&bird, pipes)) {
+            printf("Game Over! Score: %d\n", score);
+            quit = true;
+        }
+
+        // Render
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);  // Clear the screen
+        SDL_RenderClear(renderer);
+
+        // Draw bird
+        SDL_Rect birdRect = {bird.x, bird.y, 20, 20};
+        SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);  // Yellow bird
+        SDL_RenderFillRect(renderer, &birdRect);
+
+        // Draw pipes
+        SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);  // Green pipes
+        for (int i = 0; i < 2; i++) {
+            SDL_Rect topPipe = {pipes[i].x, 0, PIPE_WIDTH, pipes[i].height};
+            SDL_Rect bottomPipe = {pipes[i].x, pipes[i].height + PIPE_GAP, PIPE_WIDTH, SCREEN_HEIGHT - pipes[i].height - PIPE_GAP};
+            SDL_RenderFillRect(renderer, &topPipe);
+            SDL_RenderFillRect(renderer, &bottomPipe);
+        }
+
+        // Draw score
+        char scoreText[10];
+        sprintf(scoreText, "Score: %d", score);
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        SDL_RenderDrawText(renderer, scoreText, 10, 10);
+
+        // Present the render
+        SDL_RenderPresent(renderer);
+
+        // Delay to control game speed
+        SDL_Delay(10);
+    }
+
+    // Clean up and quit
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+
+    return 0;
+}
